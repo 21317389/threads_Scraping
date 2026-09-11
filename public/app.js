@@ -434,46 +434,54 @@ function copyBatchResultsJSON() {
     });
 }
 
-// 複製為 PPT / Excel 格式表格 (HTML 渲染 + TSV 雙重寫入剪貼簿，直接在 PPT / Excel 貼上即可呈現表格)
+// 複製為 PPT / Excel 格式表格 (完美符合簡報格式：上線時間、溝通內容、連結、瀏覽數、按讚數、留言數、轉發/分享)
 function copyBatchResultsTable() {
     if (batchResultsData.length === 0) return;
 
-    // 建立純文字 (TSV) 格式，適合 Excel / 記事本貼上 (順序：MM/DD、內文第一句話、瀏覽、按讚、留言、轉發)
-    const tsvHeader = '日期\t內文第一句話\t瀏覽\t按讚\t留言\t轉發';
+    // 格式化日期為 M/D (去除開頭的 0，例如 8/11)
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        return dateStr.replace(/^0(\d)/, '$1').replace(/\/0(\d)/, '/$1');
+    };
+
+    // 建立純文字 (TSV) 格式，適合 Excel / 記事本貼上
+    const tsvHeader = '上線時間\t溝通內容\t連結\t瀏覽數\t按讚數\t留言數\t轉發/分享';
     const tsvRows = batchResultsData.map(item => {
-        const dateStr = item.postDate || '-';
+        const dateStr = formatDate(item.postDate);
         const firstSentence = getFirstSentence(item.content);
-        return `${dateStr}\t${firstSentence}\t${item.views}\t${item.likes}\t${item.replies}\t${item.reposts}`;
+        return `${dateStr}\t${firstSentence}\t${item.url}\t${item.views}\t${item.likes}\t${item.replies}\t${item.reposts}`;
     });
     const tsvString = [tsvHeader, ...tsvRows].join('\n');
 
-    // 建立 HTML 格式表格，使 PowerPoint / Excel / Word 貼上時直接解析成表格
-    // 內文第一句話帶有超連結，點選可直接跳轉至原貼文
+    // 建立 HTML 格式表格，使 PowerPoint / Excel 貼上時完全符合簡報樣式
     const htmlString = `
-        <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
+        <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', '微軟正黑體', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
             <thead>
-                <tr style="background-color: #f3f4f6; font-weight: bold; border-bottom: 2px solid #d1d5db;">
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; width: 10%;">日期</th>
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: left; color: #1f2937; width: 42%;">內文第一句話</th>
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; width: 12%;">瀏覽</th>
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; width: 12%;">按讚</th>
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; width: 12%;">留言</th>
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; width: 12%;">轉發</th>
+                <tr style="background-color: #6b7280; color: #ffffff; font-weight: bold; border-bottom: 2px solid #4b5563;">
+                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">上線時間</th>
+                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 42%; font-size: 14px;">溝通內容</th>
+                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">連結</th>
+                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">瀏覽數</th>
+                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">按讚數</th>
+                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">留言數</th>
+                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">轉發/分享</th>
                 </tr>
             </thead>
             <tbody>
-                ${batchResultsData.map(item => {
-                    const dateStr = item.postDate || '-';
+                ${batchResultsData.map((item, index) => {
+                    const dateStr = formatDate(item.postDate);
                     const firstSentence = getFirstSentence(item.content);
                     const safeContent = escapeHtml(firstSentence);
+                    const bg = index % 2 === 1 ? '#f9fafb' : '#ffffff';
                     return `
-                        <tr style="border-bottom: 1px solid #e5e7eb;">
-                            <td style="padding: 8px 12px; border: 1px solid #d1d5db; text-align: center; color: #111827; white-space: nowrap;">${dateStr}</td>
-                            <td style="padding: 8px 12px; border: 1px solid #d1d5db; text-align: left;"><a href="${item.url}" target="_blank" style="color: #0066cc; text-decoration: underline;">${safeContent}</a></td>
-                            <td style="padding: 8px 12px; border: 1px solid #d1d5db; text-align: center; color: #111827;">${item.views}</td>
-                            <td style="padding: 8px 12px; border: 1px solid #d1d5db; text-align: center; color: #111827;">${item.likes}</td>
-                            <td style="padding: 8px 12px; border: 1px solid #d1d5db; text-align: center; color: #111827;">${item.replies}</td>
-                            <td style="padding: 8px 12px; border: 1px solid #d1d5db; text-align: center; color: #111827;">${item.reposts}</td>
+                        <tr style="background-color: ${bg}; border-bottom: 1px solid #e5e7eb;">
+                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; white-space: nowrap; font-size: 14px;">${dateStr}</td>
+                            <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeContent}</td>
+                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-size: 14px;"><a href="${item.url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">連結</a></td>
+                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.views}</td>
+                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.likes}</td>
+                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.replies}</td>
+                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.reposts}</td>
                         </tr>
                     `;
                 }).join('')}

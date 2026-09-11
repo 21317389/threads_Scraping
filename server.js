@@ -169,15 +169,17 @@ app.post('/api/scrape', async (req, res) => {
             }
         }
 
-        // 格式化發文日期為 MM/DD 與完整時間
+        // 格式化發文日期為 M/D (例如 8/11) 與完整時間
         let postDate = '';
         let postFullDate = '';
         if (takenAt) {
             const d = new Date(takenAt * 1000);
             if (!isNaN(d.getTime())) {
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                postDate = `${mm}/${dd}`;
+                const month = d.getMonth() + 1;
+                const day = d.getDate();
+                postDate = `${month}/${day}`;
+                const mm = String(month).padStart(2, '0');
+                const dd = String(day).padStart(2, '0');
                 const yyyy = d.getFullYear();
                 const hh = String(d.getHours()).padStart(2, '0');
                 const min = String(d.getMinutes()).padStart(2, '0');
