@@ -45,17 +45,14 @@ app.post('/api/scrape', async (req, res) => {
         return res.status(400).json({ success: false, error: '請輸入有效的 Threads 貼文網址' });
     }
 
-    // 提取 Shortcode
-    const shortcodeMatch = targetUrl.match(/\/post\/([A-Za-z0-9_\-]+)/);
-    const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
-    if (!shortcode) {
-        return res.status(400).json({ success: false, error: '無法從網址解析貼文 Shortcode ID' });
-    }
+    // 嘗試提取 Shortcode；若為 /share/ 分享短網址則待頁面跳轉後解析
+    let shortcodeMatch = targetUrl.match(/\/post\/([A-Za-z0-9_\-]+)/);
+    let shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
 
     let browser;
     try {
         console.log(`\n---------------- [Scraper Request] ----------------`);
-        console.log(`[Scraper Step 1] 收到請求，解析短代碼: ${shortcode}`);
+        console.log(`[Scraper Step 1] 收到請求: ${targetUrl} (代碼: ${shortcode || '待轉跳解析'})`);
         console.log(`[Scraper Step 2] 正在啟動 Playwright Chromium 瀏覽器...`);
         
         browser = await chromium.launch({ 
@@ -89,6 +86,16 @@ app.post('/api/scrape', async (req, res) => {
         
         console.log(`[Scraper Step 6] 網頁載入完成。等待 4 秒以確保動態渲染完畢...`);
         await page.waitForTimeout(4000);
+
+        // 若為 /share/ 短網址，從轉跳後的實際頁面網址中解析 shortcode
+        const currentUrl = page.url();
+        if (!shortcode) {
+            const redirectMatch = currentUrl.match(/\/post\/([A-Za-z0-9_\-]+)/);
+            if (redirectMatch) {
+                shortcode = redirectMatch[1];
+                console.log(`[Scraper Step 6.5] 成功解析分享短網址跳轉後代碼: ${shortcode}`);
+            }
+        }
 
         console.log(`[Scraper Step 7] 開始提取網頁 Metadata JSON 腳本標籤...`);
         const scriptContents = await page.evaluate(() => {
