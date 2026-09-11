@@ -79,6 +79,50 @@ body {
     z-index: 1;
 }
 
+/* --- 平台切換分頁列 --- */
+.platform-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 6px;
+    border-radius: 18px;
+    border: 1px solid var(--border-color);
+}
+
+.platform-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.platform-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.platform-tab.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.platform-tab .tab-icon {
+    font-size: 1.2rem;
+}
+
 /* --- Header 設計 --- */
 .header {
     text-align: center;

@@ -257,6 +257,210 @@ app.post('/api/scrape', async (req, res) => {
     }
 });
 
+// Dcard 貼文爬取 API
+app.post('/api/scrape-dcard', async (req, res) => {
+    let { url } = req.body;
+
+    if (!url) {
+        return res.status(400).json({ success: false, error: '請提供 Dcard 貼文網址' });
+    }
+
+    url = url.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+    }
+
+    const postIdMatch = url.match(/\/p\/(\d+)/);
+    if (!postIdMatch) {
+        return res.status(400).json({ success: false, error: '無法從網址解析 Dcard 文章 ID (需包含 /p/代碼)' });
+    }
+    const postId = postIdMatch[1];
+
+    let browser;
+    try {
+        console.log(`\n---------------- [Dcard Scraper Request] ----------------`);
+        console.log(`[Dcard Step 1] 收到請求，解析 Post ID: ${postId}`);
+        console.log(`[Dcard Step 2] 正在啟動 Playwright 瀏覽器...`);
+
+        // 優先嘗試 channel: 'chrome' 避開 Cloudflare 挑戰，若無則啟動標準 chromium
+        try {
+            browser = await chromium.launch({
+                channel: 'chrome',
+                headless: true,
+                args: [
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox'
+                ]
+            });
+        } catch (e) {
+            browser = await chromium.launch({
+                headless: true,
+                args: [
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox'
+                ]
+            });
+        }
+
+        console.log(`[Dcard Step 3] 建立 Context 與防偵測腳本...`);
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            locale: 'zh-TW',
+            timezoneId: 'Asia/Taipei',
+            viewport: { width: 1920, height: 1080 }
+        });
+
+        await context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+        });
+
+        const page = await context.newPage();
+
+        let postApiData = null;
+        page.on('response', async (response) => {
+            const resUrl = response.url();
+            if (resUrl.includes('/api/v2/posts/') && !resUrl.includes('/comments') && !resUrl.includes('/similar')) {
+                try {
+                    const json = await response.json();
+                    if (json && json.title) {
+                        postApiData = json;
+                    }
+                } catch (e) {}
+            }
+        });
+
+        console.log(`[Dcard Step 4] 載入文章網址: ${url}...`);
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+
+        // 1. 優先從頁面中的 __NEXT_DATA__ 提取資料
+        let nextDataObj = null;
+        try {
+            const rawNext = await page.evaluate(() => {
+                const el = document.getElementById('__NEXT_DATA__');
+                return el ? el.innerText : null;
+            });
+            if (rawNext) {
+                const parsed = JSON.parse(rawNext);
+                function findPost(obj, id) {
+                    if (!obj || typeof obj !== 'object') return null;
+                    if (obj.title && obj.createdAt && (obj.likeCount !== undefined || obj.commentCount !== undefined)) {
+                        if (!id || String(obj.id) === String(id)) return obj;
+                    }
+                    for (const k in obj) {
+                        if (Object.prototype.hasOwnProperty.call(obj, k)) {
+                            const res = findPost(obj[k], id);
+                            if (res) return res;
+                        }
+                    }
+                    return null;
+                }
+                nextDataObj = findPost(parsed, postId) || findPost(parsed, null);
+            }
+        } catch (e) {}
+
+        // 2. 若未從 __NEXT_DATA__ 找到，則等待網路 API 攔截
+        if (!nextDataObj) {
+            for (let i = 0; i < 20; i++) {
+                if (postApiData) break;
+                await page.waitForTimeout(150);
+            }
+        }
+
+        const targetData = nextDataObj || postApiData;
+
+        let postDate = '-';
+        let forumName = '綜合';
+        let title = '';
+        let excerpt = '';
+        let likes = '0';
+        let replies = '0';
+
+        if (targetData) {
+            console.log(`[Dcard Step 5] 成功解析 Dcard 結構化資料！`);
+            if (targetData.createdAt) {
+                const d = new Date(targetData.createdAt);
+                if (!isNaN(d.getTime())) {
+                    postDate = `${d.getMonth() + 1}/${d.getDate()}`;
+                }
+            }
+            forumName = targetData.forumName || '綜合';
+            title = targetData.title || '';
+            excerpt = targetData.excerpt || '';
+            likes = String(targetData.likeCount || 0);
+            replies = String(targetData.commentCount || 0);
+        } else {
+            console.log(`[Dcard Step 5] 未找到 JSON 結構，改由網頁 Title 與 DOM 提取...`);
+            const rawTitle = await page.title().catch(() => '');
+            const cleanedTitle = rawTitle.replace(/\u00a0/g, ' ').trim();
+            const match = cleanedTitle.match(/^(.*?)\s*[-–—]\s*(.*?)(板)?\s*\|\s*Dcard/i);
+            if (match) {
+                title = match[1].trim();
+                forumName = match[2].trim();
+            } else {
+                title = cleanedTitle.replace(/\s*\|\s*Dcard/i, '').trim();
+            }
+
+            const domData = await page.evaluate(() => {
+                const timeEl = document.querySelector('time');
+                return {
+                    timeStr: timeEl ? (timeEl.getAttribute('datetime') || timeEl.innerText) : ''
+                };
+            });
+            if (domData.timeStr) {
+                const d = new Date(domData.timeStr);
+                if (!isNaN(d.getTime())) {
+                    postDate = `${d.getMonth() + 1}/${d.getDate()}`;
+                }
+            }
+        }
+
+        // 清理標題後綴，確保不包含「 - 醫美板 | Dcard」
+        if (title.includes(' - ') || title.includes(' | Dcard') || title.includes(' - ')) {
+            const cleaned = title.replace(/\u00a0/g, ' ').trim();
+            const m = cleaned.match(/^(.*?)\s*[-–—]\s*(.*?)(板)?\s*\|\s*Dcard/i);
+            if (m) {
+                title = m[1].trim();
+                if (forumName === '綜合') forumName = m[2].trim();
+            }
+        }
+
+        // 移除版位後綴「板」，符合簡報格式（如「醫美」而非「醫美板」）
+        forumName = forumName.replace(/板$/, '').trim();
+
+        const resultData = {
+            platform: 'dcard',
+            url,
+            postId,
+            postDate,
+            forum: 'Dcard',
+            forumName,
+            title,
+            content: excerpt,
+            views: '-',
+            likes,
+            replies
+        };
+
+        console.log(`[Dcard Step 6] 抓取完成，資料封裝成功！`);
+        res.json({
+            success: true,
+            data: resultData
+        });
+
+    } catch (err) {
+        console.error(`[Dcard Error] 抓取失敗: ${err.message}`);
+        res.status(500).json({ success: false, error: `Dcard 抓取失敗: ${err.message}` });
+    } finally {
+        if (browser) {
+            await browser.close();
+            console.log('[Dcard] 瀏覽器實例已關閉');
+        }
+    }
+});
+
 // 動態尋找可用連接埠
 const net = require('net');
 function startServer(port) {

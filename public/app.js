@@ -7,8 +7,54 @@ const errorTextSpan = document.getElementById('errorText');
 const resultContainerDiv = document.getElementById('resultContainer');
 const resultsList = document.getElementById('resultsList');
 
+// 當前選取平臺：'threads' 或 'dcard'
+let currentPlatform = 'threads';
+
 // 儲存所有批次抓取的成功結果數據
 let batchResultsData = [];
+
+// 平臺切換邏輯
+function switchPlatform(platform) {
+    if (currentPlatform === platform) return;
+    currentPlatform = platform;
+
+    // 更新分頁標籤樣式
+    document.getElementById('tabThreads').classList.toggle('active', platform === 'threads');
+    document.getElementById('tabDcard').classList.toggle('active', platform === 'dcard');
+
+    // 更新標題與副標題
+    const titleEl = document.getElementById('appTitle');
+    const subtitleEl = document.getElementById('appSubtitle');
+    const logoEl = document.getElementById('appLogo');
+
+    if (platform === 'dcard') {
+        titleEl.innerHTML = 'Dcard <span>文章數據查詢監控</span>';
+        subtitleEl.innerText = '輸入 Dcard 文章網址，即時分析看板、互動與留言統計';
+        logoEl.innerHTML = `
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#006aa6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+        `;
+    } else {
+        titleEl.innerHTML = 'Threads <span>貼文數據查詢監控</span>';
+        subtitleEl.innerText = '輸入 Threads 貼文網址，即時分析曝光、互動與讚數統計';
+        logoEl.innerHTML = `
+            <svg viewBox="0 0 24 24" width="32" height="32" class="threads-logo">
+                <path fill="currentColor" d="M16.792 11.838c-.378-.06-.757-.107-1.14-.14-.265-.957-.75-1.85-1.428-2.613.567-.425 1.258-.696 2.023-.746.216.772.392 1.636.545 2.5zm-5.01-4.887c.22-.016.44-.025.666-.025.753 0 1.48.11 2.164.316-.275.76-.632 1.488-1.05 2.146a4.42 4.42 0 0 0-1.78-2.437zM12.448 17c-.226 0-.447-.01-.667-.026-.807-.052-1.545-.357-2.128-.846.332-.782.784-1.503 1.332-2.14 1.15.228 2.054.673 2.658 1.312a3.844 3.844 0 0 1-1.2 1.7zm1.884.286c-.573.473-1.25.76-1.99.82a8.88 8.88 0 0 1-1.042.06c-1.86 0-3.32-.472-4.34-1.405C7.933 15.827 7.42 14.542 7.42 12.91c0-1.632.513-2.917 1.54-3.85C9.98 8.127 11.44 7.655 13.3 7.655c.742 0 1.41.088 1.99.262.58.175 1.056.44 1.428.8a5.1 5.1 0 0 1 1.037 1.547c.28.66.42 1.42.42 2.277v1.895c0 .736.216 1.104.647 1.104.223 0 .463-.122.716-.367a7.288 7.288 0 0 0 1.257-1.89c.143-.332.32-.395.532-.19l.568.553c.18.174.22.378.12.612a8.47 8.47 0 0 1-1.802 2.637 4.122 4.122 0 0 1-2.946 1.1c-.812 0-1.458-.225-1.936-.675-.478-.45-.717-1.062-.717-1.837v-1.895c0-.62-.1-1.16-.3-1.62-.2-.46-.5-.815-.9-1.065-.4-.25-.9-.375-1.5-.375-.615 0-1.127.126-1.536.377-.41.25-.718.608-.925 1.073-.207.465-.31 1.008-.31 1.63 0 .62.103 1.163.31 1.63.207.465.515.823.925 1.073.41.25.92.377 1.536.377.388 0 .762-.05 1.12-.152-.162.296-.347.58-.553.85a5.55 5.55 0 0 1-1.423.858c-.53.22-1.11.332-1.742.332-1.282 0-2.285-.327-3.007-.98-.723-.655-1.085-1.576-1.085-2.766s.362-2.11 1.085-2.765c.722-.654 1.725-.98 3.007-.98.812 0 1.52.122 2.124.367.604.245 1.087.61 1.45 1.096a6.046 6.046 0 0 1 .904 1.72 6.782 6.782 0 0 1 .288 2.054c0 1.036-.316 1.847-.948 2.433z"/>
+            </svg>
+        `;
+    }
+
+    // 重設輸入框為該平臺預設樣式
+    urlInputsContainer.innerHTML = '';
+    createInputRow();
+
+    // 清空舊結果
+    batchResultsData = [];
+    resultsList.innerHTML = '';
+    resultContainerDiv.classList.add('hidden');
+    errorMessageDiv.classList.add('hidden');
+}
 
 // 截取貼文內文的第一句話
 function getFirstSentence(content) {
@@ -53,6 +99,10 @@ function createInputRow(initialValue = '') {
     rowDiv.className = 'input-row';
     rowDiv.id = rowId;
     
+    const placeholderText = currentPlatform === 'dcard'
+        ? '貼上 Dcard 文章網址，例如：https://www.dcard.tw/f/beauty/p/...'
+        : '貼上 Threads 貼文網址，例如：https://www.threads.net/@username/post/...';
+
     rowDiv.innerHTML = `
         <div class="input-group">
             <span class="input-icon">
@@ -61,7 +111,7 @@ function createInputRow(initialValue = '') {
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
             </span>
-            <input type="url" class="post-url-input" placeholder="貼上 Threads 貼文網址，例如：https://www.threads.net/@username/post/..." value="${initialValue}" required>
+            <input type="url" class="post-url-input" placeholder="${placeholderText}" value="${initialValue}" required>
             <button class="clear-button" type="button" aria-label="清除輸入" style="display: ${initialValue ? 'flex' : 'none'};">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -182,7 +232,11 @@ async function queryBatchMetrics() {
     rows.forEach((row, idx) => {
         const url = row.querySelector('.post-url-input').value.trim();
         if (url) {
-            if (url.includes('threads.net') || url.includes('threads.com')) {
+            const isValid = currentPlatform === 'dcard'
+                ? (url.includes('dcard.tw') && /\/p\/\d+/.test(url))
+                : (url.includes('threads.net') || url.includes('threads.com'));
+
+            if (isValid) {
                 urlsToScrape.push({ url, rowIndex: idx });
             } else {
                 row.querySelector('.post-url-input').focus();
@@ -191,7 +245,10 @@ async function queryBatchMetrics() {
     });
 
     if (urlsToScrape.length === 0) {
-        showError('請至少輸入一個有效的 Threads 貼文網址（需包含 threads.net 或 threads.com）！');
+        const errorMsg = currentPlatform === 'dcard'
+            ? '請至少輸入一個有效的 Dcard 文章網址（需包含 dcard.tw 以及 /p/文章代碼）！'
+            : '請至少輸入一個有效的 Threads 貼文網址（需包含 threads.net 或 threads.com）！';
+        showError(errorMsg);
         return;
     }
 
@@ -213,8 +270,11 @@ async function queryBatchMetrics() {
         const skeletonId = `skeleton_${i}`;
         appendSkeletonCard(skeletonId, item.url);
         
+        const isDcard = currentPlatform === 'dcard' || item.url.includes('dcard.tw');
+        const endpoint = isDcard ? '/api/scrape-dcard' : '/api/scrape';
+
         try {
-            const response = await fetch('/api/scrape', {
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -229,20 +289,34 @@ async function queryBatchMetrics() {
             if (skeletonEl) skeletonEl.remove();
 
             if (response.ok && result.success) {
-                // 渲染結果貼文卡片
-                appendResultCard(result.data);
-                
-                // 儲存需要保留的數據：日期、內文、按讚數、留言、轉發、瀏覽
-                batchResultsData.push({
-                    url: result.data.url,
-                    postDate: result.data.postDate || '',
-                    postFullDate: result.data.postFullDate || '',
-                    content: result.data.content || '',
-                    likes: result.data.likes,
-                    replies: result.data.replies,
-                    reposts: result.data.reposts,
-                    views: result.data.views
-                });
+                if (result.data.platform === 'dcard' || isDcard) {
+                    appendDcardResultCard(result.data);
+                    batchResultsData.push({
+                        platform: 'dcard',
+                        url: result.data.url,
+                        postDate: result.data.postDate || '-',
+                        forum: 'Dcard',
+                        forumName: result.data.forumName || '綜合',
+                        title: result.data.title || '（無標題）',
+                        views: '-',
+                        likes: result.data.likes || '0',
+                        replies: result.data.replies || '0'
+                    });
+                } else {
+                    // 渲染 Threads 結果貼文卡片
+                    appendResultCard(result.data);
+                    batchResultsData.push({
+                        platform: 'threads',
+                        url: result.data.url,
+                        postDate: result.data.postDate || '',
+                        postFullDate: result.data.postFullDate || '',
+                        content: result.data.content || '',
+                        likes: result.data.likes,
+                        replies: result.data.replies,
+                        reposts: result.data.reposts,
+                        views: result.data.views
+                    });
+                }
             } else {
                 appendErrorCard(item.url, result.error || '抓取數據時發生未知錯誤。');
             }
@@ -284,6 +358,76 @@ function appendSkeletonCard(id, url) {
             <div class="skeleton-stat-card"></div>
             <div class="skeleton-stat-card"></div>
             <div class="skeleton-stat-card"></div>
+        </div>
+    `;
+    resultsList.appendChild(card);
+}
+
+// 插入 Dcard 結果預覽卡片
+function appendDcardResultCard(data) {
+    const card = document.createElement('div');
+    card.className = 'threads-preview-card animate-fade-in';
+    card.innerHTML = `
+        <div class="card-header">
+            <div class="avatar-wrapper" style="background: rgba(0, 106, 166, 0.15); display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%;">
+                <span style="font-size: 1.4rem;">🍃</span>
+            </div>
+            <div class="user-meta">
+                <div class="user-name-wrapper">
+                    <span class="user-name" style="color: #0084d1; font-weight: 700;">Dcard · ${escapeHtml(data.forumName)}板</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="user-handle">${data.postId ? '文章 ID: ' + data.postId : 'Dcard 貼文'}</span>
+                    <span class="post-date-badge" style="font-size: 0.78rem; color: var(--text-secondary); opacity: 0.85; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">📅 ${data.postDate}</span>
+                </div>
+            </div>
+            <div class="threads-badge-icon">
+                <a href="${data.url}" target="_blank" style="color: #0084d1;" title="點選跳轉原始 Dcard 文章">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary); line-height: 1.4;">${escapeHtml(data.title)}</h3>
+            <p class="post-content" style="font-size: 0.92rem; color: var(--text-secondary);">${escapeHtml(data.content) || '（無內文摘要）'}</p>
+        </div>
+        
+        <div class="divider"></div>
+
+        <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="stat-card">
+                <div class="stat-icon-bg icon-likes">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                </div>
+                <div class="stat-value">${data.likes}</div>
+                <div class="stat-label">按讚數</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon-bg icon-replies">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM18 14H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                    </svg>
+                </div>
+                <div class="stat-value">${data.replies}</div>
+                <div class="stat-label">留言數</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon-bg icon-views">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                    </svg>
+                </div>
+                <div class="stat-value">${data.views}</div>
+                <div class="stat-label">瀏覽數 (不公開)</div>
+            </div>
         </div>
     `;
     resultsList.appendChild(card);
@@ -434,60 +578,111 @@ function copyBatchResultsJSON() {
     });
 }
 
-// 複製為 PPT / Excel 格式表格 (完美符合簡報格式：上線時間、溝通內容、連結、瀏覽數、按讚數、留言數、轉發/分享)
+// 複製為 PPT / Excel 格式表格 (自動依據平臺套用不同規格)
 function copyBatchResultsTable() {
     if (batchResultsData.length === 0) return;
 
-    // 格式化日期為 M/D (去除開頭的 0，例如 8/11)
+    const isDcard = currentPlatform === 'dcard' || batchResultsData[0]?.platform === 'dcard';
+
+    // 格式化日期為 M/D (去除開頭的 0，例如 8/11 或 7/29)
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
         return dateStr.replace(/^0(\d)/, '$1').replace(/\/0(\d)/, '/$1');
     };
 
-    // 建立純文字 (TSV) 格式，適合 Excel / 記事本貼上
-    const tsvHeader = '上線時間\t溝通內容\t連結\t瀏覽數\t按讚數\t留言數\t轉發/分享';
-    const tsvRows = batchResultsData.map(item => {
-        const dateStr = formatDate(item.postDate);
-        const firstSentence = getFirstSentence(item.content);
-        return `${dateStr}\t${firstSentence}\t${item.url}\t${item.views}\t${item.likes}\t${item.replies}\t${item.reposts}`;
-    });
-    const tsvString = [tsvHeader, ...tsvRows].join('\n');
+    let tsvString = '';
+    let htmlString = '';
 
-    // 建立 HTML 格式表格，使 PowerPoint / Excel 貼上時完全符合簡報樣式
-    const htmlString = `
-        <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', '微軟正黑體', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
-            <thead>
-                <tr style="background-color: #6b7280; color: #ffffff; font-weight: bold; border-bottom: 2px solid #4b5563;">
-                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">上線時間</th>
-                    <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 42%; font-size: 14px;">溝通內容</th>
-                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">連結</th>
-                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">瀏覽數</th>
-                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">按讚數</th>
-                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">留言數</th>
-                    <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">轉發/分享</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${batchResultsData.map((item, index) => {
-                    const dateStr = formatDate(item.postDate);
-                    const firstSentence = getFirstSentence(item.content);
-                    const safeContent = escapeHtml(firstSentence);
-                    const bg = index % 2 === 1 ? '#f9fafb' : '#ffffff';
-                    return `
-                        <tr style="background-color: ${bg}; border-bottom: 1px solid #e5e7eb;">
-                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; white-space: nowrap; font-size: 14px;">${dateStr}</td>
-                            <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeContent}</td>
-                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-size: 14px;"><a href="${item.url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">連結</a></td>
-                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.views}</td>
-                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.likes}</td>
-                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.replies}</td>
-                            <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.reposts}</td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>
-    `;
+    if (isDcard) {
+        // Dcard 規格表格 (8 欄：上線時間、論壇、版位、標題、連結、瀏覽數、按讚數、留言數)
+        const tsvHeader = '上線時間\t論壇\t版位\t標題\t連結\t瀏覽數\t按讚數\t留言數';
+        const tsvRows = batchResultsData.map(item => {
+            const dateStr = formatDate(item.postDate);
+            return `${dateStr}\t${item.forum || 'Dcard'}\t${item.forumName || '-'}\t${item.title || '-'}\t${item.url}\t${item.views || '-'}\t${item.likes || '0'}\t${item.replies || '0'}`;
+        });
+        tsvString = [tsvHeader, ...tsvRows].join('\n');
+
+        htmlString = `
+            <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', '微軟正黑體', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
+                <thead>
+                    <tr style="background-color: #6b7280; color: #ffffff; font-weight: bold; border-bottom: 2px solid #4b5563;">
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 9%; font-size: 14px;">上線時間</th>
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">論壇</th>
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">版位</th>
+                        <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 45%; font-size: 14px;">標題</th>
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">連結</th>
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">瀏覽數</th>
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">按讚數</th>
+                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">留言數</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${batchResultsData.map((item, index) => {
+                        const dateStr = formatDate(item.postDate);
+                        const safeTitle = escapeHtml(item.title || '-');
+                        const safeForumName = escapeHtml(item.forumName || '-');
+                        const bg = index % 2 === 1 ? '#f9fafb' : '#ffffff';
+                        return `
+                            <tr style="background-color: ${bg}; border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; white-space: nowrap; font-size: 14px;">${dateStr}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.forum || 'Dcard'}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeForumName}</td>
+                                <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeTitle}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-size: 14px;"><a href="${item.url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">連結</a></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.views || '-'}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.likes || '0'}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.replies || '0'}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    } else {
+        // Threads 規格表格 (7 欄：上線時間、溝通內容、連結、瀏覽數、按讚數、留言數、轉發/分享)
+        const tsvHeader = '上線時間\t溝通內容\t連結\t瀏覽數\t按讚數\t留言數\t轉發/分享';
+        const tsvRows = batchResultsData.map(item => {
+            const dateStr = formatDate(item.postDate);
+            const firstSentence = getFirstSentence(item.content);
+            return `${dateStr}\t${firstSentence}\t${item.url}\t${item.views}\t${item.likes}\t${item.replies}\t${item.reposts}`;
+        });
+        tsvString = [tsvHeader, ...tsvRows].join('\n');
+
+        htmlString = `
+            <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', '微軟正黑體', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
+                <thead>
+                    <tr style="background-color: #6b7280; color: #ffffff; font-weight: bold; border-bottom: 2px solid #4b5563;">
+                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">上線時間</th>
+                        <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 42%; font-size: 14px;">溝通內容</th>
+                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">連結</th>
+                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">瀏覽數</th>
+                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">按讚數</th>
+                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">留言數</th>
+                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">轉發/分享</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${batchResultsData.map((item, index) => {
+                        const dateStr = formatDate(item.postDate);
+                        const firstSentence = getFirstSentence(item.content);
+                        const safeContent = escapeHtml(firstSentence);
+                        const bg = index % 2 === 1 ? '#f9fafb' : '#ffffff';
+                        return `
+                            <tr style="background-color: ${bg}; border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; white-space: nowrap; font-size: 14px;">${dateStr}</td>
+                                <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeContent}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-size: 14px;"><a href="${item.url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">連結</a></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.views}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.likes}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.replies}</td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.reposts}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    }
 
     try {
         const typeHtml = 'text/html';
