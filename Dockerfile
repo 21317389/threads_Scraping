@@ -1,5 +1,5 @@
-﻿# 使用微軟官方 Playwright 映像檔（已預先安裝 Linux 必要底層套件與 Chromium 瀏覽器）
-FROM mcr.microsoft.com/playwright:v1.45.0-jammy
+# 使用微軟官方 Playwright 映像檔（已預先安裝 Linux 必要底層套件與 Chromium 瀏覽器）
+FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 
 WORKDIR /app
 
