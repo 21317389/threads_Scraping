@@ -283,10 +283,35 @@ app.post('/api/scrape-dcard', async (req, res) => {
     }
     const postId = postIdMatch[1];
 
+    // 從網址推斷看板名稱
+    const forumSlugMatch = url.match(/\/f\/([a-zA-Z0-9_-]+)/);
+    const forumSlug = forumSlugMatch ? forumSlugMatch[1].toLowerCase() : '';
+    const FORUM_MAP = {
+        'sex': '西斯',
+        'mood': '心情',
+        'beauty': '美妝',
+        'facelift': '醫美',
+        'dressup': '穿搭',
+        'food': '美食',
+        'girl': '女孩',
+        'relationship': '感情',
+        'funny': '梗圖',
+        'talk': '閒聊',
+        'trending': '時事',
+        'fitness': '健身',
+        '3c': '3C',
+        'game': '遊戲',
+        'pet': '寵物',
+        'car': '汽機車',
+        'house': '居家生活'
+    };
+    const detectedForumName = FORUM_MAP[forumSlug] || (forumSlug ? forumSlug.charAt(0).toUpperCase() + forumSlug.slice(1) : '綜合');
+    const is18Plus = forumSlug === 'sex';
+
     let browser;
     try {
         console.log(`\n---------------- [Dcard Scraper Request] ----------------`);
-        console.log(`[Dcard Step 1] 收到請求，解析 Post ID: ${postId}`);
+        console.log(`[Dcard Step 1] 收到請求，解析 Post ID: ${postId}，推測看板: ${detectedForumName} (${forumSlug || '未知'})`);
         console.log(`[Dcard Step 2] 正在啟動 Playwright 瀏覽器...`);
 
         // 優先嘗試 channel: 'chrome' 避開 Cloudflare 挑戰，若無則啟動標準 chromium
@@ -345,14 +370,18 @@ app.post('/api/scrape-dcard', async (req, res) => {
         // 檢查是否觸發 Cloudflare 盾牌或成人驗證頁
         const pageTitle = await page.title().catch(() => '');
         if (pageTitle.includes('Cloudflare') || pageTitle.includes('確認您的連線') || pageTitle.includes('請稍候')) {
-            console.error(`[Dcard Error] 觸發 Cloudflare / 18+ 驗證: ${pageTitle}`);
+            console.error(`[Dcard Error] 觸發 Cloudflare / 安全驗證: ${pageTitle}`);
+            const friendlyError = is18Plus
+                ? '此文章屬於 Dcard 18+ 限制級看板（西斯板），受官方安全驗證保護無法自動讀取。請使用下方「快速手動補填」直接加入報表！'
+                : `此文章受到 Dcard 官方安全防護（Cloudflare 驗證），暫時無法自動讀取。請使用下方「快速手動補填」直接加入報表！`;
             return res.status(403).json({
                 success: false,
                 isRestricted: true,
+                is18Plus,
                 postId,
                 url,
-                forumName: url.includes('/f/sex') ? '西斯' : '綜合',
-                error: '此文章屬於 Dcard 18+ 限制級看板（如西斯板），受官方安全驗證保護無法自動讀取。請使用下方「快速手動補填」直接加入報表！'
+                forumName: detectedForumName,
+                error: friendlyError
             });
         }
 
@@ -453,13 +482,17 @@ app.post('/api/scrape-dcard', async (req, res) => {
 
         if (!title || title === '找不到頁面' || title.includes('Cloudflare') || title.includes('確認您的連線') || title.includes('請稍候')) {
             console.error(`[Dcard Error] 無法讀取文章或被阻擋: ${title}`);
+            const friendlyError = is18Plus
+                ? '此文章屬於 Dcard 18+ 限制級看板（西斯板），受官方安全驗證保護無法自動讀取。請使用下方「快速手動補填」直接加入報表！'
+                : `此文章受到 Dcard 官方安全防護（Cloudflare 驗證），暫時無法自動讀取。請使用下方「快速手動補填」直接加入報表！`;
             return res.status(403).json({
                 success: false,
                 isRestricted: true,
+                is18Plus,
                 postId,
                 url,
-                forumName: forumName || (url.includes('/f/sex') ? '西斯' : '綜合'),
-                error: '無法讀取文章標題或此文章為 18+ 看板。請使用下方「快速手動補填」直接加入報表！'
+                forumName: (forumName && forumName !== '綜合') ? forumName : detectedForumName,
+                error: friendlyError
             });
         }
 

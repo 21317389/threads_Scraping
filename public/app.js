@@ -465,20 +465,41 @@ function appendErrorCard(url, errorMessage, resultDetails = {}) {
         return;
     }
 
-    // Dcard 失敗 / 18+ 限制級卡片 (提供一鍵快速補填)
+    // Dcard 失敗 / 安全防護受限卡片 (提供一鍵快速補填)
     const postIdMatch = url.match(/\/p\/(\d+)/);
     const postId = postIdMatch ? postIdMatch[1] : '';
     
-    // 推測看板名稱
-    let guessedForum = '西斯';
-    if (url.includes('/f/sex')) guessedForum = '西斯';
-    else if (url.includes('/f/facelift')) guessedForum = '醫美';
-    else if (url.includes('/f/beauty')) guessedForum = '美妝';
-    else if (url.includes('/f/mood')) guessedForum = '心情';
-    else if (url.includes('/f/dressup')) guessedForum = '穿搭';
-    else if (url.includes('/f/food')) guessedForum = '美食';
-    else if (url.includes('/f/girl')) guessedForum = '女孩';
-    else if (resultDetails && resultDetails.forumName) guessedForum = resultDetails.forumName;
+    // 解析看板名稱
+    const FORUM_MAP = {
+        'sex': '西斯',
+        'mood': '心情',
+        'beauty': '美妝',
+        'facelift': '醫美',
+        'dressup': '穿搭',
+        'food': '美食',
+        'girl': '女孩',
+        'relationship': '感情',
+        'funny': '梗圖',
+        'talk': '閒聊',
+        'trending': '時事',
+        'fitness': '健身',
+        '3c': '3C',
+        'game': '遊戲',
+        'pet': '寵物',
+        'car': '汽機車',
+        'house': '居家生活'
+    };
+    const slugMatch = url.match(/\/f\/([a-zA-Z0-9_-]+)/);
+    const slug = slugMatch ? slugMatch[1].toLowerCase() : '';
+    let guessedForum = (resultDetails && resultDetails.forumName && resultDetails.forumName !== '綜合')
+        ? resultDetails.forumName
+        : (FORUM_MAP[slug] || (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : '綜合'));
+
+    const is18Plus = resultDetails?.is18Plus || slug === 'sex' || url.includes('/f/sex');
+    const badgeText = is18Plus ? '18+ 官方驗證看板' : '官方安全驗證保護';
+    const badgeColor = is18Plus ? '#f87171' : '#fbbf24';
+    const badgeBg = is18Plus ? 'rgba(239, 68, 68, 0.15)' : 'rgba(251, 191, 36, 0.15)';
+    const badgeBorder = is18Plus ? 'rgba(239, 68, 68, 0.3)' : 'rgba(251, 191, 36, 0.3)';
 
     const now = new Date();
     const defaultDate = `${now.getMonth() + 1}/${now.getDate()}`;
@@ -488,16 +509,16 @@ function appendErrorCard(url, errorMessage, resultDetails = {}) {
             <span style="font-size: 1.3rem; margin-top: 2px;">⚠️</span>
             <div style="flex: 1;">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                    <strong style="color: #f87171; font-size: 1rem;">Dcard 文章讀取受限（官方安全驗證）</strong>
-                    <span style="background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">18+ 官方驗證看板</span>
+                    <strong style="color: ${badgeColor}; font-size: 1rem;">Dcard 文章讀取受限（官方安全驗證）</strong>
+                    <span style="background: ${badgeBg}; color: ${badgeColor}; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; border: 1px solid ${badgeBorder};">${badgeText}</span>
                 </div>
                 <div style="font-size: 0.85rem; margin-top: 6px; color: rgba(255, 255, 255, 0.75); line-height: 1.4;">
-                    ${errorMessage}
+                    ${escapeHtml(errorMessage)}
                 </div>
             </div>
         </div>
         <div class="error-card-url" style="margin-top: 8px; font-size: 0.8rem; word-break: break-all;">
-            文章連結: <a href="${url}" target="_blank" style="color: #60a5fa; text-decoration: underline;">${url}</a>
+            文章連結: <a href="${escapeHtml(url)}" target="_blank" style="color: #60a5fa; text-decoration: underline;">${escapeHtml(url)}</a>
         </div>
 
         <!-- 快速手動補填降級表單 -->
@@ -508,11 +529,11 @@ function appendErrorCard(url, errorMessage, resultDetails = {}) {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 10px;">
                 <div>
                     <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">上線時間 (M/D)</label>
-                    <input type="text" class="fallback-date" value="${defaultDate}" placeholder="例：7/28" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                    <input type="text" class="fallback-date" value="${defaultDate}" placeholder="例：${defaultDate}" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">看板版位</label>
-                    <input type="text" class="fallback-forum" value="${guessedForum}" placeholder="例：西斯" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                    <input type="text" class="fallback-forum" value="${escapeHtml(guessedForum)}" placeholder="例：${escapeHtml(guessedForum)}" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">按讚數</label>
@@ -525,7 +546,7 @@ function appendErrorCard(url, errorMessage, resultDetails = {}) {
             </div>
             <div style="margin-bottom: 12px;">
                 <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">文章標題 <span style="color: #ef4444;">*</span></label>
-                <input type="text" class="fallback-title" placeholder="請貼上文章標題（例如：做完蝴蝶電波終於開機😍）" style="width: 100%; padding: 8px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                <input type="text" class="fallback-title" placeholder="請貼上文章標題（可由瀏覽器分頁直接複製）" style="width: 100%; padding: 8px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
             </div>
             <button type="button" class="btn-save-fallback" style="width: 100%; padding: 9px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.2s;">
                 💾 儲存並加入報表清單
@@ -711,95 +732,167 @@ function copyBatchResultsTable() {
         return dateStr.replace(/^0(\d)/, '$1').replace(/\/0(\d)/, '/$1');
     };
 
+    // 解析數值以利加總
+    const parseMetricNumber = (val) => {
+        if (!val || val === '-' || val === '未公開/未抓到') return null;
+        let s = String(val).replace(/,/g, '').trim();
+        if (s.endsWith('k') || s.endsWith('K')) return Math.round(parseFloat(s) * 1000);
+        if (s.endsWith('m') || s.endsWith('M')) return Math.round(parseFloat(s) * 1000000);
+        if (s.endsWith('萬')) return Math.round(parseFloat(s) * 10000);
+        const n = parseInt(s, 10);
+        return isNaN(n) ? null : n;
+    };
+
     let tsvString = '';
     let htmlString = '';
 
     if (isDcard) {
         // Dcard 規格表格 (8 欄：上線時間、論壇、版位、標題、連結、瀏覽數、按讚數、留言數)
+        let totalViewsNum = 0;
+        let hasNumericViews = false;
+        let totalLikesNum = 0;
+        let totalRepliesNum = 0;
+
+        batchResultsData.forEach(item => {
+            const v = parseMetricNumber(item.views);
+            if (v !== null) {
+                totalViewsNum += v;
+                hasNumericViews = true;
+            }
+            const l = parseMetricNumber(item.likes);
+            if (l !== null) totalLikesNum += l;
+            const r = parseMetricNumber(item.replies);
+            if (r !== null) totalRepliesNum += r;
+        });
+
+        const totalViewsStr = hasNumericViews ? (totalViewsNum.toLocaleString() + '+') : '-';
+        const totalLikesStr = totalLikesNum.toLocaleString() + '+';
+        const totalRepliesStr = totalRepliesNum.toLocaleString() + '+';
+
         const tsvHeader = '上線時間\t論壇\t版位\t標題\t連結\t瀏覽數\t按讚數\t留言數';
         const tsvRows = batchResultsData.map(item => {
             const dateStr = formatDate(item.postDate);
             return `${dateStr}\t${item.forum || 'Dcard'}\t${item.forumName || '-'}\t${item.title || '-'}\t${item.url}\t${item.views || '-'}\t${item.likes || '0'}\t${item.replies || '0'}`;
         });
-        tsvString = [tsvHeader, ...tsvRows].join('\n');
+        const tsvTotalRow = `數據總計\t\t\t\t\t${totalViewsStr}\t${totalLikesStr}\t${totalRepliesStr}`;
+        tsvString = [tsvHeader, ...tsvRows, tsvTotalRow].join('\n');
 
         htmlString = `
-            <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', '微軟正黑體', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
+            <table border="1" style="border-collapse: collapse; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; width: 100%; border: 1px solid #ffffff;">
                 <thead>
-                    <tr style="background-color: #6b7280; color: #ffffff; font-weight: bold; border-bottom: 2px solid #4b5563;">
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 9%; font-size: 14px;">上線時間</th>
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">論壇</th>
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">版位</th>
-                        <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 45%; font-size: 14px;">標題</th>
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">連結</th>
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">瀏覽數</th>
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">按讚數</th>
-                        <th style="padding: 10px 10px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">留言數</th>
+                    <tr style="background-color: #707070; color: #ffffff; font-weight: bold;">
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 9%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">上線時間</span></th>
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">論壇</span></th>
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">版位</span></th>
+                        <th style="padding: 10px 14px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 45%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">標題</span></th>
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">連結</span></th>
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">瀏覽數</span></th>
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">按讚數</span></th>
+                        <th style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">留言數</span></th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${batchResultsData.map((item, index) => {
+                    ${batchResultsData.map((item) => {
                         const dateStr = formatDate(item.postDate);
                         const safeTitle = escapeHtml(item.title || '-');
                         const safeForumName = escapeHtml(item.forumName || '-');
-                        const bg = index % 2 === 1 ? '#f9fafb' : '#ffffff';
                         return `
-                            <tr style="background-color: ${bg}; border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; white-space: nowrap; font-size: 14px;">${dateStr}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.forum || 'Dcard'}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeForumName}</td>
-                                <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeTitle}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-size: 14px;"><a href="${item.url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">連結</a></td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.views || '-'}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.likes || '0'}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.replies || '0'}</td>
+                            <tr style="background-color: #ffffff; border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; white-space: nowrap;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${dateStr}</span></td>
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.forum || 'Dcard'}</span></td>
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${safeForumName}</span></td>
+                                <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${safeTitle}</span></td>
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><a href="${item.url}" target="_blank" style="color: #0000ff; text-decoration: underline; font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #0000ff; text-decoration: underline;">連結</span></a></td>
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.views || '-'}</span></td>
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.likes || '0'}</span></td>
+                                <td style="padding: 9px 8px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.replies || '0'}</span></td>
                             </tr>
                         `;
                     }).join('')}
+                    <!-- 數據總計深藍列 -->
+                    <tr style="background-color: #002060; color: #ffffff; font-weight: bold;">
+                        <td colspan="5" style="padding: 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">數據總計</span></td>
+                        <td style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalViewsStr}</span></td>
+                        <td style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalLikesStr}</span></td>
+                        <td style="padding: 10px 8px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalRepliesStr}</span></td>
+                    </tr>
                 </tbody>
             </table>
         `;
     } else {
         // Threads 規格表格 (7 欄：上線時間、溝通內容、連結、瀏覽數、按讚數、留言數、轉發/分享)
+        let totalViewsNum = 0;
+        let hasNumericViews = false;
+        let totalLikesNum = 0;
+        let totalRepliesNum = 0;
+        let totalRepostsNum = 0;
+
+        batchResultsData.forEach(item => {
+            const v = parseMetricNumber(item.views);
+            if (v !== null) {
+                totalViewsNum += v;
+                hasNumericViews = true;
+            }
+            const l = parseMetricNumber(item.likes);
+            if (l !== null) totalLikesNum += l;
+            const r = parseMetricNumber(item.replies);
+            if (r !== null) totalRepliesNum += r;
+            const rp = parseMetricNumber(item.reposts);
+            if (rp !== null) totalRepostsNum += rp;
+        });
+
+        const totalViewsStr = hasNumericViews ? (totalViewsNum.toLocaleString() + '+') : '-';
+        const totalLikesStr = totalLikesNum.toLocaleString() + '+';
+        const totalRepliesStr = totalRepliesNum.toLocaleString() + '+';
+        const totalRepostsStr = totalRepostsNum.toLocaleString() + '+';
+
         const tsvHeader = '上線時間\t溝通內容\t連結\t瀏覽數\t按讚數\t留言數\t轉發/分享';
         const tsvRows = batchResultsData.map(item => {
             const dateStr = formatDate(item.postDate);
             const firstSentence = getFirstSentence(item.content);
             return `${dateStr}\t${firstSentence}\t${item.url}\t${item.views}\t${item.likes}\t${item.replies}\t${item.reposts}`;
         });
-        tsvString = [tsvHeader, ...tsvRows].join('\n');
+        const tsvTotalRow = `數據總計\t\t\t${totalViewsStr}\t${totalLikesStr}\t${totalRepliesStr}\t${totalRepostsStr}`;
+        tsvString = [tsvHeader, ...tsvRows, tsvTotalRow].join('\n');
 
         htmlString = `
-            <table border="1" style="border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', '微軟正黑體', Roboto, Helvetica, Arial, sans-serif; width: 100%; border: 1px solid #d1d5db;">
+            <table border="1" style="border-collapse: collapse; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; width: 100%; border: 1px solid #ffffff;">
                 <thead>
-                    <tr style="background-color: #6b7280; color: #ffffff; font-weight: bold; border-bottom: 2px solid #4b5563;">
-                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">上線時間</th>
-                        <th style="padding: 10px 14px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 42%; font-size: 14px;">溝通內容</th>
-                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 8%; font-size: 14px;">連結</th>
-                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">瀏覽數</th>
-                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">按讚數</th>
-                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">留言數</th>
-                        <th style="padding: 10px 12px; border: 1px solid #d1d5db; text-align: center; color: #ffffff; width: 10%; font-size: 14px;">轉發/分享</th>
+                    <tr style="background-color: #707070; color: #ffffff; font-weight: bold;">
+                        <th style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 10%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">上線時間</span></th>
+                        <th style="padding: 10px 14px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 42%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">溝通內容</span></th>
+                        <th style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 8%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">連結</span></th>
+                        <th style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 10%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">瀏覽數</span></th>
+                        <th style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 10%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">按讚數</span></th>
+                        <th style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 10%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">留言數</span></th>
+                        <th style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 18pt; width: 10%;"><span style="font-size: 18pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">轉發/分享</span></th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${batchResultsData.map((item, index) => {
+                    ${batchResultsData.map((item) => {
                         const dateStr = formatDate(item.postDate);
                         const firstSentence = getFirstSentence(item.content);
                         const safeContent = escapeHtml(firstSentence);
-                        const bg = index % 2 === 1 ? '#f9fafb' : '#ffffff';
                         return `
-                            <tr style="background-color: ${bg}; border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; white-space: nowrap; font-size: 14px;">${dateStr}</td>
-                                <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${safeContent}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-size: 14px;"><a href="${item.url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">連結</a></td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.views}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.likes}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.replies}</td>
-                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #1f2937; font-size: 14px;">${item.reposts}</td>
+                            <tr style="background-color: #ffffff; border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; white-space: nowrap;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${dateStr}</span></td>
+                                <td style="padding: 9px 14px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${safeContent}</span></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><a href="${item.url}" target="_blank" style="color: #0000ff; text-decoration: underline; font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #0000ff; text-decoration: underline;">連結</span></a></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.views}</span></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.likes}</span></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.replies}</span></td>
+                                <td style="padding: 9px 10px; border: 1px solid #d1d5db; text-align: center; color: #000000; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt;"><span style="font-size: 16pt; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #000000;">${item.reposts}</span></td>
                             </tr>
                         `;
                     }).join('')}
+                    <!-- 數據總計深藍列 -->
+                    <tr style="background-color: #002060; color: #ffffff; font-weight: bold;">
+                        <td colspan="3" style="padding: 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">數據總計</span></td>
+                        <td style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalViewsStr}</span></td>
+                        <td style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalLikesStr}</span></td>
+                        <td style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalRepliesStr}</span></td>
+                        <td style="padding: 10px 10px; border: 1px solid #ffffff; text-align: center; color: #ffffff; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; font-size: 16pt; font-weight: bold;"><span style="font-size: 16pt; font-weight: bold; font-family: '微軟正黑體', 'Microsoft JhengHei', sans-serif; color: #ffffff;">${totalRepostsStr}</span></td>
+                    </tr>
                 </tbody>
             </table>
         `;
