@@ -318,13 +318,13 @@ async function queryBatchMetrics() {
                     });
                 }
             } else {
-                appendErrorCard(item.url, result.error || '抓取數據時發生未知錯誤。');
+                appendErrorCard(item.url, result.error || '抓取數據時發生未知錯誤。', result);
             }
         } catch (err) {
             console.error(err);
             const skeletonEl = document.getElementById(skeletonId);
             if (skeletonEl) skeletonEl.remove();
-            appendErrorCard(item.url, '無法連線至本地端 API 伺服器，請確保後端 node server.js 已啟動。');
+            appendErrorCard(item.url, '無法連線至本地端 API 伺服器，請確保後端 node server.js 已啟動。', { url: item.url });
         }
     }
 
@@ -363,8 +363,8 @@ function appendSkeletonCard(id, url) {
     resultsList.appendChild(card);
 }
 
-// 插入 Dcard 結果預覽卡片
-function appendDcardResultCard(data) {
+// 建立 Dcard 結果預覽卡片元素
+function createDcardResultCardElement(data) {
     const card = document.createElement('div');
     card.className = 'threads-preview-card animate-fade-in';
     card.innerHTML = `
@@ -430,7 +430,147 @@ function appendDcardResultCard(data) {
             </div>
         </div>
     `;
+    return card;
+}
+
+// 插入 Dcard 結果預覽卡片
+function appendDcardResultCard(data) {
+    const card = createDcardResultCardElement(data);
     resultsList.appendChild(card);
+}
+
+// 插入失敗提示卡片 (支援 Dcard 18+ 快速手動補填降級)
+function appendErrorCard(url, errorMessage, resultDetails = {}) {
+    const card = document.createElement('div');
+    const isDcard = currentPlatform === 'dcard' || url.includes('dcard.tw');
+    card.className = 'threads-preview-card error-card animate-fade-in';
+    const cardId = 'err_card_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    card.id = cardId;
+
+    if (!isDcard) {
+        // Threads 失敗卡片
+        card.innerHTML = `
+            <div class="error-card-body">
+                <span style="font-size: 1.25rem;">⚠️</span>
+                <div>
+                    <strong>分析貼文失敗</strong>
+                    <div style="font-size: 0.85rem; margin-top: 4px; color: rgba(255, 255, 255, 0.7);">${errorMessage}</div>
+                </div>
+            </div>
+            <div class="error-card-url">
+                目標連結: <a href="${url}" target="_blank" style="color: var(--text-secondary); text-decoration: underline;">${url}</a>
+            </div>
+        `;
+        resultsList.appendChild(card);
+        return;
+    }
+
+    // Dcard 失敗 / 18+ 限制級卡片 (提供一鍵快速補填)
+    const postIdMatch = url.match(/\/p\/(\d+)/);
+    const postId = postIdMatch ? postIdMatch[1] : '';
+    
+    // 推測看板名稱
+    let guessedForum = '西斯';
+    if (url.includes('/f/sex')) guessedForum = '西斯';
+    else if (url.includes('/f/facelift')) guessedForum = '醫美';
+    else if (url.includes('/f/beauty')) guessedForum = '美妝';
+    else if (url.includes('/f/mood')) guessedForum = '心情';
+    else if (url.includes('/f/dressup')) guessedForum = '穿搭';
+    else if (url.includes('/f/food')) guessedForum = '美食';
+    else if (url.includes('/f/girl')) guessedForum = '女孩';
+    else if (resultDetails && resultDetails.forumName) guessedForum = resultDetails.forumName;
+
+    const now = new Date();
+    const defaultDate = `${now.getMonth() + 1}/${now.getDate()}`;
+
+    card.innerHTML = `
+        <div class="error-card-body" style="align-items: flex-start; gap: 12px;">
+            <span style="font-size: 1.3rem; margin-top: 2px;">⚠️</span>
+            <div style="flex: 1;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <strong style="color: #f87171; font-size: 1rem;">Dcard 文章讀取受限（官方安全驗證）</strong>
+                    <span style="background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">18+ 官方驗證看板</span>
+                </div>
+                <div style="font-size: 0.85rem; margin-top: 6px; color: rgba(255, 255, 255, 0.75); line-height: 1.4;">
+                    ${errorMessage}
+                </div>
+            </div>
+        </div>
+        <div class="error-card-url" style="margin-top: 8px; font-size: 0.8rem; word-break: break-all;">
+            文章連結: <a href="${url}" target="_blank" style="color: #60a5fa; text-decoration: underline;">${url}</a>
+        </div>
+
+        <!-- 快速手動補填降級表單 -->
+        <div style="margin-top: 14px; padding: 14px; background: rgba(0, 0, 0, 0.3); border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 8px;">
+            <div style="font-size: 0.88rem; font-weight: 600; color: #93c5fd; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                ✏️ 快速手動補填（填寫後直接排入報表與複製表格，無需重新爬取）
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                <div>
+                    <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">上線時間 (M/D)</label>
+                    <input type="text" class="fallback-date" value="${defaultDate}" placeholder="例：7/28" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">看板版位</label>
+                    <input type="text" class="fallback-forum" value="${guessedForum}" placeholder="例：西斯" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">按讚數</label>
+                    <input type="text" class="fallback-likes" value="0" placeholder="0" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">留言數</label>
+                    <input type="text" class="fallback-replies" value="0" placeholder="0" style="width: 100%; padding: 7px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+                </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">文章標題 <span style="color: #ef4444;">*</span></label>
+                <input type="text" class="fallback-title" placeholder="請貼上文章標題（例如：做完蝴蝶電波終於開機😍）" style="width: 100%; padding: 8px 10px; background: #182234; border: 1px solid #3b4b66; border-radius: 6px; color: #fff; font-size: 0.85rem; box-sizing: border-box;">
+            </div>
+            <button type="button" class="btn-save-fallback" style="width: 100%; padding: 9px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.2s;">
+                💾 儲存並加入報表清單
+            </button>
+        </div>
+    `;
+
+    resultsList.appendChild(card);
+
+    // 綁定儲存按鈕事件
+    const saveBtn = card.querySelector('.btn-save-fallback');
+    saveBtn.addEventListener('click', () => {
+        const inputTitle = card.querySelector('.fallback-title').value.trim();
+        const inputForum = card.querySelector('.fallback-forum').value.trim() || '西斯';
+        const inputDate = card.querySelector('.fallback-date').value.trim() || defaultDate;
+        const inputLikes = card.querySelector('.fallback-likes').value.trim() || '0';
+        const inputReplies = card.querySelector('.fallback-replies').value.trim() || '0';
+
+        if (!inputTitle) {
+            alert('請至少填寫「文章標題」！');
+            card.querySelector('.fallback-title').focus();
+            return;
+        }
+
+        const fallbackItemData = {
+            platform: 'dcard',
+            url,
+            postId,
+            postDate: inputDate,
+            forum: 'Dcard',
+            forumName: inputForum.replace(/板$/, '').trim(),
+            title: inputTitle,
+            content: '',
+            views: '-',
+            likes: inputLikes,
+            replies: inputReplies
+        };
+
+        // 存入 batchResultsData 讓「複製為 PPT / Excel」直接包含這筆
+        batchResultsData.push(fallbackItemData);
+
+        // 替換原本的錯誤卡片為已完成的結果卡片
+        const resultCard = createDcardResultCardElement(fallbackItemData);
+        card.replaceWith(resultCard);
+    });
 }
 
 // 插入結果預覽卡片
@@ -513,25 +653,6 @@ function appendResultCard(data) {
         </div>
         <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 14px; text-align: right; font-family: monospace; word-break: break-all;">
             連結: <a href="${data.url}" target="_blank" style="color: var(--accent-purple); text-decoration: none;">${data.url}</a>
-        </div>
-    `;
-    resultsList.appendChild(card);
-}
-
-// 插入失敗提示卡片
-function appendErrorCard(url, errorMessage) {
-    const card = document.createElement('div');
-    card.className = 'threads-preview-card error-card animate-fade-in';
-    card.innerHTML = `
-        <div class="error-card-body">
-            <span style="font-size: 1.25rem;">⚠️</span>
-            <div>
-                <strong>分析貼文失敗</strong>
-                <div style="font-size: 0.85rem; margin-top: 4px; color: rgba(255, 255, 255, 0.7);">${errorMessage}</div>
-            </div>
-        </div>
-        <div class="error-card-url">
-            目標連結: <a href="${url}" target="_blank" style="color: var(--text-secondary); text-decoration: underline;">${url}</a>
         </div>
     `;
     resultsList.appendChild(card);

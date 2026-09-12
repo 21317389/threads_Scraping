@@ -313,7 +313,7 @@ app.post('/api/scrape-dcard', async (req, res) => {
 
         console.log(`[Dcard Step 3] 建立 Context 與防偵測腳本...`);
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
             locale: 'zh-TW',
             timezoneId: 'Asia/Taipei',
             viewport: { width: 1920, height: 1080 }
@@ -341,6 +341,20 @@ app.post('/api/scrape-dcard', async (req, res) => {
 
         console.log(`[Dcard Step 4] 載入文章網址: ${url}...`);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+
+        // 檢查是否觸發 Cloudflare 盾牌或成人驗證頁
+        const pageTitle = await page.title().catch(() => '');
+        if (pageTitle.includes('Cloudflare') || pageTitle.includes('確認您的連線') || pageTitle.includes('請稍候')) {
+            console.error(`[Dcard Error] 觸發 Cloudflare / 18+ 驗證: ${pageTitle}`);
+            return res.status(403).json({
+                success: false,
+                isRestricted: true,
+                postId,
+                url,
+                forumName: url.includes('/f/sex') ? '西斯' : '綜合',
+                error: '此文章屬於 Dcard 18+ 限制級看板（如西斯板），受官方安全驗證保護無法自動讀取。請使用下方「快速手動補填」直接加入報表！'
+            });
+        }
 
         // 1. 優先從頁面中的 __NEXT_DATA__ 提取資料
         let nextDataObj = null;
@@ -436,6 +450,18 @@ app.post('/api/scrape-dcard', async (req, res) => {
 
         // 移除版位後綴「板」，符合簡報格式（如「醫美」而非「醫美板」）
         forumName = forumName.replace(/板$/, '').trim();
+
+        if (!title || title === '找不到頁面' || title.includes('Cloudflare') || title.includes('確認您的連線') || title.includes('請稍候')) {
+            console.error(`[Dcard Error] 無法讀取文章或被阻擋: ${title}`);
+            return res.status(403).json({
+                success: false,
+                isRestricted: true,
+                postId,
+                url,
+                forumName: forumName || (url.includes('/f/sex') ? '西斯' : '綜合'),
+                error: '無法讀取文章標題或此文章為 18+ 看板。請使用下方「快速手動補填」直接加入報表！'
+            });
+        }
 
         const resultData = {
             platform: 'dcard',
