@@ -44,6 +44,66 @@ function findPostObject(obj, code) {
     return null;
 }
 
+// Dcard 常用看板 Slug 對照字典
+const DCARD_FORUM_MAP = {
+    'sex': '西斯',
+    'mood': '心情',
+    'beauty': '美妝',
+    'facelift': '醫美',
+    'dressup': '穿搭',
+    'food': '美食',
+    'girl': '女孩',
+    'relationship': '感情',
+    'funny': '梗圖',
+    'talk': '閒聊',
+    'trending': '時事',
+    'fitness': '健身',
+    '3c': '3C',
+    'game': '遊戲',
+    'pet': '寵物',
+    'car': '汽機車',
+    'house': '居家生活'
+};
+
+// Dcard 依據網址解析看 Slug 與推測中文名稱
+function parseDcardForum(url) {
+    const slugMatch = url.match(/\/f\/([a-zA-Z0-9_-]+)/);
+    const slug = slugMatch ? slugMatch[1].toLowerCase() : '';
+    const forumName = DCARD_FORUM_MAP[slug] || (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : '綜合');
+    return { slug, forumName, is18Plus: slug === 'sex' };
+}
+
+// Dcard 遞迴深層搜尋文章物件
+function findDcardPostObject(obj, id) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (obj.title && obj.createdAt && (obj.likeCount !== undefined || obj.commentCount !== undefined)) {
+        if (!id || String(obj.id) === String(id)) return obj;
+    }
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const res = findDcardPostObject(obj[key], id);
+            if (res) return res;
+        }
+    }
+    return null;
+}
+
+// Dcard 清洗網頁 Title 與版位名稱
+function parseDcardTitleAndForum(rawTitle) {
+    const cleaned = (rawTitle || '').replace(/\u00a0/g, ' ').trim();
+    const match = cleaned.match(/^(.*?)\s*[-–—]\s*(.*?)(板|forum)?\s*\|\s*Dcard/i);
+    if (match) {
+        return {
+            title: match[1].trim(),
+            forumName: match[2].replace(/(板|forum)$/i, '').trim()
+        };
+    }
+    return {
+        title: cleaned.replace(/\s*\|\s*Dcard/i, '').trim(),
+        forumName: ''
+    };
+}
+
 app.post('/api/scrape', async (req, res) => {
     let { url } = req.body;
 
@@ -105,39 +165,42 @@ app.post('/api/scrape', async (req, res) => {
         console.log(`[Scraper Step 5] 分頁已開啟。正在載入目標 Threads 網址: ${targetUrl}...`);
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         
-        console.log(`[Scraper Step 6] 網頁載入完成。等待 4 秒以確保動態渲染完畢...`);
-        await page.waitForTimeout(4000);
-
-        // 若為 /share/ 短網址，從轉跳後的實際頁面網址中解析 shortcode
-        const currentUrl = page.url();
-        if (!shortcode) {
-            const redirectMatch = currentUrl.match(/\/post\/([A-Za-z0-9_\-]+)/);
-            if (redirectMatch) {
-                shortcode = redirectMatch[1];
-                console.log(`[Scraper Step 6.5] 成功解析分享短網址跳轉後代碼: ${shortcode}`);
-            }
-        }
-
-        console.log(`[Scraper Step 7] 開始提取網頁 Metadata JSON 腳本標籤...`);
-        const scriptContents = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('script'))
-                .map(s => s.innerText)
-                .filter(text => text.trim().startsWith('{') && text.trim().endsWith('}'));
-        });
-
-        console.log(`[Scraper Step 8] 取得 ${scriptContents.length} 個 JSON 腳本，開始遞迴尋找貼文物件...`);
+        console.log(`[Scraper Step 6] 網頁載入完成，開始動態輪詢提取貼文資料 (最多 4 秒)...`);
         let targetPostObj = null;
-        for (const rawJson of scriptContents) {
-            try {
-                const parsed = JSON.parse(rawJson);
-                const match = findPostObject(parsed, shortcode);
-                if (match) {
-                    targetPostObj = match;
-                    break;
+
+        // 動態輪詢：每 300ms 檢查一次 JSON 標籤，一旦拿到資料立即提前結束等待
+        for (let waitStep = 0; waitStep < 13; waitStep++) {
+            const currentUrl = page.url();
+            if (!shortcode) {
+                const redirectMatch = currentUrl.match(/\/post\/([A-Za-z0-9_\-]+)/);
+                if (redirectMatch) {
+                    shortcode = redirectMatch[1];
+                    console.log(`[Scraper Step 6.5] 成功解析分享短網址跳轉後代碼: ${shortcode}`);
                 }
-            } catch (e) {
-                // 忽略解析錯誤
             }
+
+            const scriptContents = await page.evaluate(() => {
+                return Array.from(document.querySelectorAll('script'))
+                    .map(s => s.innerText)
+                    .filter(text => text.trim().startsWith('{') && text.trim().endsWith('}'));
+            }).catch(() => []);
+
+            for (const rawJson of scriptContents) {
+                try {
+                    const parsed = JSON.parse(rawJson);
+                    const match = findPostObject(parsed, shortcode);
+                    if (match) {
+                        targetPostObj = match;
+                        break;
+                    }
+                } catch (e) {}
+            }
+
+            if (targetPostObj) {
+                console.log(`[Scraper Step 6.6] 貼文資料於第 ${(waitStep * 300) / 1000} 秒提前成功就緒！`);
+                break;
+            }
+            await page.waitForTimeout(300);
         }
 
         // 初始化基本變數
@@ -307,20 +370,7 @@ function fetchDcardViaScraperApi(targetUrl, postId, apiKey) {
                 }
                 try {
                     const parsed = JSON.parse(match[1]);
-                    function findPost(obj, id) {
-                        if (!obj || typeof obj !== 'object') return null;
-                        if (obj.title && obj.createdAt && (obj.likeCount !== undefined || obj.commentCount !== undefined)) {
-                            if (!id || String(obj.id) === String(id)) return obj;
-                        }
-                        for (const k in obj) {
-                            if (Object.prototype.hasOwnProperty.call(obj, k)) {
-                                const r = findPost(obj[k], id);
-                                if (r) return r;
-                            }
-                        }
-                        return null;
-                    }
-                    const post = findPost(parsed, postId) || findPost(parsed, null);
+                    const post = findDcardPostObject(parsed, postId) || findDcardPostObject(parsed, null);
                     if (post && post.title) {
                         return resolve(post);
                     }
@@ -360,30 +410,8 @@ app.post('/api/scrape-dcard', async (req, res) => {
     }
     const postId = postIdMatch[1];
 
-    // 從網址推斷看板名稱
-    const forumSlugMatch = url.match(/\/f\/([a-zA-Z0-9_-]+)/);
-    const forumSlug = forumSlugMatch ? forumSlugMatch[1].toLowerCase() : '';
-    const FORUM_MAP = {
-        'sex': '西斯',
-        'mood': '心情',
-        'beauty': '美妝',
-        'facelift': '醫美',
-        'dressup': '穿搭',
-        'food': '美食',
-        'girl': '女孩',
-        'relationship': '感情',
-        'funny': '梗圖',
-        'talk': '閒聊',
-        'trending': '時事',
-        'fitness': '健身',
-        '3c': '3C',
-        'game': '遊戲',
-        'pet': '寵物',
-        'car': '汽機車',
-        'house': '居家生活'
-    };
-    const detectedForumName = FORUM_MAP[forumSlug] || (forumSlug ? forumSlug.charAt(0).toUpperCase() + forumSlug.slice(1) : '綜合');
-    const is18Plus = forumSlug === 'sex';
+    // 從網址解析看板資訊
+    const { slug: forumSlug, forumName: detectedForumName, is18Plus } = parseDcardForum(url);
 
     // 1. 優先嘗試透過 ScraperAPI 住宅通道穿透 Cloudflare（需於環境變數設定 SCRAPER_API_KEY）
     const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || '';
@@ -514,20 +542,7 @@ app.post('/api/scrape-dcard', async (req, res) => {
             });
             if (rawNext) {
                 const parsed = JSON.parse(rawNext);
-                function findPost(obj, id) {
-                    if (!obj || typeof obj !== 'object') return null;
-                    if (obj.title && obj.createdAt && (obj.likeCount !== undefined || obj.commentCount !== undefined)) {
-                        if (!id || String(obj.id) === String(id)) return obj;
-                    }
-                    for (const k in obj) {
-                        if (Object.prototype.hasOwnProperty.call(obj, k)) {
-                            const res = findPost(obj[k], id);
-                            if (res) return res;
-                        }
-                    }
-                    return null;
-                }
-                nextDataObj = findPost(parsed, postId) || findPost(parsed, null);
+                nextDataObj = findDcardPostObject(parsed, postId) || findDcardPostObject(parsed, null);
             }
         } catch (e) {}
 
@@ -542,7 +557,7 @@ app.post('/api/scrape-dcard', async (req, res) => {
         const targetData = nextDataObj || postApiData;
 
         let postDate = '-';
-        let forumName = '綜合';
+        let forumName = detectedForumName || '綜合';
         let title = '';
         let excerpt = '';
         let likes = '0';
@@ -556,7 +571,7 @@ app.post('/api/scrape-dcard', async (req, res) => {
                     postDate = `${d.getMonth() + 1}/${d.getDate()}`;
                 }
             }
-            forumName = targetData.forumName || '綜合';
+            forumName = targetData.forumName || detectedForumName || '綜合';
             title = targetData.title || '';
             excerpt = targetData.excerpt || '';
             likes = String(targetData.likeCount || 0);
@@ -564,14 +579,9 @@ app.post('/api/scrape-dcard', async (req, res) => {
         } else {
             console.log(`[Dcard Step 5] 未找到 JSON 結構，改由網頁 Title 與 DOM 提取...`);
             const rawTitle = await page.title().catch(() => '');
-            const cleanedTitle = rawTitle.replace(/\u00a0/g, ' ').trim();
-            const match = cleanedTitle.match(/^(.*?)\s*[-–—]\s*(.*?)(板)?\s*\|\s*Dcard/i);
-            if (match) {
-                title = match[1].trim();
-                forumName = match[2].trim();
-            } else {
-                title = cleanedTitle.replace(/\s*\|\s*Dcard/i, '').trim();
-            }
+            const parsedMeta = parseDcardTitleAndForum(rawTitle);
+            title = parsedMeta.title;
+            if (parsedMeta.forumName) forumName = parsedMeta.forumName;
 
             const domData = await page.evaluate(() => {
                 const timeEl = document.querySelector('time');
@@ -587,18 +597,8 @@ app.post('/api/scrape-dcard', async (req, res) => {
             }
         }
 
-        // 清理標題後綴，確保不包含「 - 醫美板 | Dcard」
-        if (title.includes(' - ') || title.includes(' | Dcard') || title.includes(' - ')) {
-            const cleaned = title.replace(/\u00a0/g, ' ').trim();
-            const m = cleaned.match(/^(.*?)\s*[-–—]\s*(.*?)(板)?\s*\|\s*Dcard/i);
-            if (m) {
-                title = m[1].trim();
-                if (forumName === '綜合') forumName = m[2].trim();
-            }
-        }
-
-        // 移除版位後綴「板」，符合簡報格式（如「醫美」而非「醫美板」）
-        forumName = forumName.replace(/板$/, '').trim();
+        // 移除版位後綴「板」或「forum」，符合簡報格式（如「醫美」而非「醫美板」）
+        forumName = forumName.replace(/(板|forum)$/i, '').trim();
 
         if (!title || title === '找不到頁面' || title.includes('Cloudflare') || title.includes('確認您的連線') || title.includes('請稍候')) {
             console.error(`[Dcard Error] 無法讀取文章或被阻擋: ${title}`);

@@ -469,31 +469,12 @@ function appendErrorCard(url, errorMessage, resultDetails = {}) {
     const postIdMatch = url.match(/\/p\/(\d+)/);
     const postId = postIdMatch ? postIdMatch[1] : '';
     
-    // 解析看板名稱
-    const FORUM_MAP = {
-        'sex': '西斯',
-        'mood': '心情',
-        'beauty': '美妝',
-        'facelift': '醫美',
-        'dressup': '穿搭',
-        'food': '美食',
-        'girl': '女孩',
-        'relationship': '感情',
-        'funny': '梗圖',
-        'talk': '閒聊',
-        'trending': '時事',
-        'fitness': '健身',
-        '3c': '3C',
-        'game': '遊戲',
-        'pet': '寵物',
-        'car': '汽機車',
-        'house': '居家生活'
-    };
+    // 看板名稱 (優先採用後端解析出的看板中文名稱)
     const slugMatch = url.match(/\/f\/([a-zA-Z0-9_-]+)/);
     const slug = slugMatch ? slugMatch[1].toLowerCase() : '';
-    let guessedForum = (resultDetails && resultDetails.forumName && resultDetails.forumName !== '綜合')
+    const guessedForum = (resultDetails && resultDetails.forumName && resultDetails.forumName !== '綜合')
         ? resultDetails.forumName
-        : (FORUM_MAP[slug] || (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : '綜合'));
+        : (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : '綜合');
 
     const is18Plus = resultDetails?.is18Plus || slug === 'sex' || url.includes('/f/sex');
     const badgeText = is18Plus ? '18+ 官方驗證看板' : '官方安全驗證保護';
@@ -683,16 +664,34 @@ function appendResultCard(data) {
 function copyBatchResultsJSON() {
     if (batchResultsData.length === 0) return;
     
-    const exportData = batchResultsData.map(item => ({
-        url: item.url,
-        postDate: item.postDate || '',
-        postFullDate: item.postFullDate || '',
-        firstSentence: getFirstSentence(item.content),
-        likes: item.likes,
-        replies: item.replies,
-        reposts: item.reposts,
-        views: item.views
-    }));
+    const isDcard = currentPlatform === 'dcard' || batchResultsData[0]?.platform === 'dcard';
+    
+    const exportData = batchResultsData.map(item => {
+        if (isDcard || item.platform === 'dcard') {
+            return {
+                platform: 'dcard',
+                url: item.url,
+                postDate: item.postDate || '-',
+                forum: item.forum || 'Dcard',
+                forumName: item.forumName || '綜合',
+                title: item.title || '',
+                views: item.views || '-',
+                likes: item.likes || '0',
+                replies: item.replies || '0'
+            };
+        }
+        return {
+            platform: 'threads',
+            url: item.url,
+            postDate: item.postDate || '',
+            postFullDate: item.postFullDate || '',
+            firstSentence: getFirstSentence(item.content),
+            likes: item.likes,
+            replies: item.replies,
+            reposts: item.reposts,
+            views: item.views
+        };
+    });
 
     const jsonString = JSON.stringify(exportData.length === 1 ? exportData[0] : exportData, null, 2);
     
