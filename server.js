@@ -1,6 +1,27 @@
 const express = require('express');
 const { chromium } = require('playwright');
 const path = require('path');
+const https = require('https');
+const fs = require('fs');
+
+// 自動讀取本地 .env (若存在)
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+    try {
+        const envContent = fs.readFileSync(envPath, 'utf-8');
+        envContent.split('\n').forEach(line => {
+            const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+            if (m) {
+                const key = m[1];
+                let val = (m[2] || '').trim();
+                if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                    val = val.slice(1, -1);
+                }
+                process.env[key] = val;
+            }
+        });
+    } catch (e) {}
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -264,6 +285,62 @@ app.post('/api/scrape', async (req, res) => {
     }
 });
 
+// 透過 ScraperAPI 住宅代理通道穿透 Cloudflare 抓取 Dcard 文章
+function fetchDcardViaScraperApi(targetUrl, postId, apiKey) {
+    return new Promise((resolve) => {
+        if (!apiKey) return resolve(null);
+        const encoded = encodeURIComponent(targetUrl);
+        const apiUrl = `https://api.scraperapi.com?api_key=${apiKey}&url=${encoded}`;
+        
+        const req = https.get(apiUrl, { timeout: 25000 }, (res) => {
+            if (res.statusCode !== 200) {
+                console.log(`[ScraperAPI] 回應狀態碼異常: ${res.statusCode}`);
+                return resolve(null);
+            }
+            let html = '';
+            res.on('data', chunk => html += chunk);
+            res.on('end', () => {
+                const match = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+                if (!match) {
+                    console.log(`[ScraperAPI] 未在 HTML 中找到 __NEXT_DATA__`);
+                    return resolve(null);
+                }
+                try {
+                    const parsed = JSON.parse(match[1]);
+                    function findPost(obj, id) {
+                        if (!obj || typeof obj !== 'object') return null;
+                        if (obj.title && obj.createdAt && (obj.likeCount !== undefined || obj.commentCount !== undefined)) {
+                            if (!id || String(obj.id) === String(id)) return obj;
+                        }
+                        for (const k in obj) {
+                            if (Object.prototype.hasOwnProperty.call(obj, k)) {
+                                const r = findPost(obj[k], id);
+                                if (r) return r;
+                            }
+                        }
+                        return null;
+                    }
+                    const post = findPost(parsed, postId) || findPost(parsed, null);
+                    if (post && post.title) {
+                        return resolve(post);
+                    }
+                } catch (e) {
+                    console.log(`[ScraperAPI] JSON 解析失敗: ${e.message}`);
+                }
+                resolve(null);
+            });
+        });
+        req.on('error', (e) => {
+            console.log(`[ScraperAPI] 網路錯誤: ${e.message}`);
+            resolve(null);
+        });
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(null);
+        });
+    });
+}
+
 // Dcard 貼文爬取 API
 app.post('/api/scrape-dcard', async (req, res) => {
     let { url } = req.body;
@@ -307,6 +384,49 @@ app.post('/api/scrape-dcard', async (req, res) => {
     };
     const detectedForumName = FORUM_MAP[forumSlug] || (forumSlug ? forumSlug.charAt(0).toUpperCase() + forumSlug.slice(1) : '綜合');
     const is18Plus = forumSlug === 'sex';
+
+    // 1. 優先嘗試透過 ScraperAPI 住宅通道穿透 Cloudflare（需於環境變數設定 SCRAPER_API_KEY）
+    const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || '';
+    if (SCRAPER_API_KEY) {
+        console.log(`\n---------------- [Dcard Scraper Request] ----------------`);
+        console.log(`[Dcard Step 1] 收到請求，解析 Post ID: ${postId}，推測看板: ${detectedForumName} (${forumSlug || '未知'})`);
+        console.log(`[Dcard Step 1.5] 啟動 ScraperAPI 住宅通道穿透 Cloudflare...`);
+        try {
+            const apiPost = await fetchDcardViaScraperApi(url, postId, SCRAPER_API_KEY);
+            if (apiPost && apiPost.title) {
+                console.log(`[Dcard ScraperAPI] 成功穿透並解析文章:「${apiPost.title}」`);
+                let postDate = '-';
+                if (apiPost.createdAt) {
+                    const d = new Date(apiPost.createdAt);
+                    if (!isNaN(d.getTime())) {
+                        postDate = `${d.getMonth() + 1}/${d.getDate()}`;
+                    }
+                }
+                let finalForumName = (apiPost.forumName || detectedForumName || '綜合').replace(/(板|forum)$/i, '').trim();
+
+                return res.json({
+                    success: true,
+                    data: {
+                        platform: 'dcard',
+                        url,
+                        postId,
+                        postDate,
+                        forum: 'Dcard',
+                        forumName: finalForumName,
+                        title: apiPost.title,
+                        content: apiPost.excerpt || '',
+                        views: '-',
+                        likes: String(apiPost.likeCount || 0),
+                        replies: String(apiPost.commentCount || 0)
+                    }
+                });
+            } else {
+                console.log(`[Dcard ScraperAPI] 未能透過住宅通道取得資料，接續嘗試 Playwright 流程...`);
+            }
+        } catch (err) {
+            console.log(`[Dcard ScraperAPI] 發生異常: ${err.message}，接續嘗試 Playwright 流程...`);
+        }
+    }
 
     let browser;
     try {
